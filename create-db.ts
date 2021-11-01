@@ -28,11 +28,23 @@ const sources = [
 
 const db = getDB('create');
 
+db.query(`PRAGMA journal_mode = MEMORY`);
+
 db.query(
-  `CREATE TABLE IF NOT EXISTS terms (term TEXT PRIMARY KEY, reverse TEXT, source INTEGER)`,
+  `CREATE TABLE IF NOT EXISTS terms (id INTEGER PRIMARY KEY, term TEXT, reverse TEXT, source INTEGER)`,
 );
 
+db.query(`BEGIN TRANSACTION`);
+
 let written = 0;
+
+const groupSize = 10_000;
+
+const preparedQuery = (() => {
+  const placeholders = Array(groupSize).fill(`(?, ?, ?)`).join(',');
+  const queryStr = `INSERT OR IGNORE INTO terms (term, reverse, source) VALUES ${placeholders}`;
+  return db.prepareQuery(queryStr);
+})();
 
 for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
   let bytesStream = (await fetch(url)).body!;
@@ -53,24 +65,30 @@ for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
   }
 
   // Buffering the chunks because it's faster than writing to sqllite per row.
-  for await (const words of wordStream.pipeThrough(bufferChunks(15_000))) {
-    const placeholders = Array(words.length).fill(`(?, ?, ${i})`).join(',');
+  for await (const words of wordStream.pipeThrough(bufferChunks(groupSize))) {
+    const args = words.flatMap((word) => {
+      const iword = word
+        .toLowerCase()
+        // Entries seem to use _ rather than space
+        .replaceAll('_', ' ')
+        // Get rid of some unnecessary chars
+        .replace(/['",]/g, '')
+        // Get rid of sections in parentheses, since it's stuff like (Album)
+        .replace(/ \([^)]+\)/g, '');
 
-    db.query(
-      `INSERT OR IGNORE INTO terms (term, reverse, source) VALUES ${placeholders}`,
-      words.flatMap((word) => {
-        const iword = word
-          .toLowerCase()
-          // Entries seem to use _ rather than space
-          .replaceAll('_', ' ')
-          // Get rid of some unnecessary chars
-          .replace(/['",]/g, '')
-          // Get rid of sections in parentheses, since it's stuff like (Album)
-          .replace(/ \([^)]+\)/g, '');
+      return [iword, [...iword].reverse().join(''), i];
+    });
 
-        return [iword, [...iword].reverse().join('')];
-      }),
-    );
+    if (words.length === groupSize) {
+      preparedQuery.execute(args);
+    } else {
+      const placeholders = Array(words.length).fill(`(?, ?, ?)`).join(',');
+      const query = db.prepareQuery(
+        `INSERT OR IGNORE INTO terms (term, reverse, source) VALUES ${placeholders}`,
+      );
+      query.execute(args);
+      query.finalize();
+    }
 
     written += words.length;
     console.log('Written', written);
@@ -79,8 +97,13 @@ for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
   console.log('Completed', url);
 }
 
-console.log(`Creating reverse terms index`);
-// Faster to do this in one operation at the end.
-db.query(`CREATE UNIQUE INDEX IF NOT EXISTS reverse ON terms (reverse)`);
+preparedQuery.finalize();
+
+console.log('Creating term index');
+db.query(`CREATE INDEX IF NOT EXISTS term ON terms (term)`);
+console.log('Creating reverse index');
+db.query(`CREATE INDEX IF NOT EXISTS reverse ON terms (reverse)`);
+
+db.query(`END TRANSACTION`);
 
 db.close();

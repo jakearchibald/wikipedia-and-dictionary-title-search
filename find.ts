@@ -15,7 +15,7 @@ if (parsedArgs.help) {
         0 - Simple word list
         1 - Wikipedia titles
         2 - Wiktionary titles
-      --one-word-only - only return one word from the start/end, useful for filtering.
+      --single-word - only return one word from the start/end, useful for filtering.
   `);
   Deno.exit();
 }
@@ -50,15 +50,15 @@ const matches = (() => {
 
   let results = db.query(query, args).map((row) => row[0] as string);
 
-  if (parsedArgs['one-word-only']) {
-    results = [...new Set(results.map((result) => /^[^ ]*/.exec(result)![0]))];
+  if (parsedArgs['single-word']) {
+    results = results.map((result) => /^[^ ]*/.exec(result)![0]);
   }
 
   if (matchEnd) {
     results = results.map((result) => [...result].reverse().join(''));
   }
 
-  return results;
+  return [...new Set(results)];
 })();
 
 console.log(`Found ${matches.length} matches`);
