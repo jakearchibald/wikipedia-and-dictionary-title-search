@@ -80,6 +80,7 @@ for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
 }
 
 console.log(`Creating reverse terms index`);
+// Faster to do this in one operation at the end.
 db.query(`CREATE UNIQUE INDEX IF NOT EXISTS reverse ON terms (reverse)`);
 
 db.close();
