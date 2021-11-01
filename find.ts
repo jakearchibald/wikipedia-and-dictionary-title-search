@@ -30,6 +30,7 @@ if (parsedArgs.starts && parsedArgs.ends) {
 
 const db = getDB('read');
 
+// Much faster searches, as it can just use the index
 db.query(`PRAGMA case_sensitive_like = TRUE`);
 
 const matchEnd = !!parsedArgs.ends;
