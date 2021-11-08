@@ -47,6 +47,13 @@ export function bufferChunks<T>(count: number): TransformStream<T, T[]> {
 }
 
 import { DB } from 'https://deno.land/x/sqlite@v3.1.1/mod.ts';
+import type { PreparedQuery } from 'https://deno.land/x/sqlite@v3.1.1/mod.ts';
 
 export const getDB = (mode: 'read' | 'write' | 'create') =>
   new DB('terms.sqlite', { mode });
+
+export function createInsertQuery(db: DB, rows: number): PreparedQuery {
+  const placeholders = Array(rows).fill(`(?, ?, ?)`).join(',');
+  const queryStr = `INSERT OR IGNORE INTO terms (term, reverse, source) VALUES ${placeholders}`;
+  return db.prepareQuery(queryStr);
+}

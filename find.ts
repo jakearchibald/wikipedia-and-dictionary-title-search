@@ -13,8 +13,8 @@ if (parsedArgs.help) {
       --ends=term
       --source - Filter to a particular word source
         0 - Simple word list
-        1 - Wikipedia titles
-        2 - Wiktionary titles
+        1 - Wiktionary titles
+        2 - Wikipedia titles
       --single-word - only return one word from the start/end, useful for filtering.
   `);
   Deno.exit();
@@ -35,8 +35,10 @@ db.query(`PRAGMA case_sensitive_like = TRUE`);
 
 const matchEnd = !!parsedArgs.ends;
 const term = (
-  parsedArgs.starts || [...parsedArgs.ends].reverse().join('')
-).replace(/[_%]/g, '');
+  (parsedArgs.starts || [...parsedArgs.ends].reverse().join('')) as string
+)
+  .replace(/[_%]/g, '')
+  .toLowerCase();
 
 const matches = (() => {
   const row = matchEnd ? 'reverse' : 'term';

@@ -3,6 +3,7 @@ import {
   chunkOnNewline,
   bufferChunks,
   getDB,
+  createInsertQuery,
 } from './src/utils.ts';
 
 const sources = [
@@ -40,11 +41,7 @@ let written = 0;
 
 const groupSize = 10_000;
 
-const preparedQuery = (() => {
-  const placeholders = Array(groupSize).fill(`(?, ?, ?)`).join(',');
-  const queryStr = `INSERT OR IGNORE INTO terms (term, reverse, source) VALUES ${placeholders}`;
-  return db.prepareQuery(queryStr);
-})();
+const fullGroupQuery = createInsertQuery(db, 10_000);
 
 for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
   let bytesStream = (await fetch(url)).body!;
@@ -80,12 +77,9 @@ for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
     });
 
     if (words.length === groupSize) {
-      preparedQuery.execute(args);
+      fullGroupQuery.execute(args);
     } else {
-      const placeholders = Array(words.length).fill(`(?, ?, ?)`).join(',');
-      const query = db.prepareQuery(
-        `INSERT OR IGNORE INTO terms (term, reverse, source) VALUES ${placeholders}`,
-      );
+      const query = createInsertQuery(db, words.length);
       query.execute(args);
       query.finalize();
     }
@@ -97,7 +91,7 @@ for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
   console.log('Completed', url);
 }
 
-preparedQuery.finalize();
+fullGroupQuery.finalize();
 
 console.log('Creating term index');
 db.query(`CREATE INDEX IF NOT EXISTS term ON terms (term)`);
