@@ -40,8 +40,8 @@ db.query(`BEGIN TRANSACTION`);
 let written = 0;
 
 const groupSize = 10_000;
-
-const fullGroupQuery = createInsertQuery(db, 10_000);
+// Compiling group query, since it's faster
+const fullGroupQuery = createInsertQuery(db, groupSize);
 
 for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
   let bytesStream = (await fetch(url)).body!;
@@ -76,6 +76,7 @@ for (const [i, { url, needsGunzip, needsHeaderSkip }] of sources.entries()) {
       return [iword, [...iword].reverse().join(''), i];
     });
 
+    // Use the precompiled query if it matches.
     if (words.length === groupSize) {
       fullGroupQuery.execute(args);
     } else {
